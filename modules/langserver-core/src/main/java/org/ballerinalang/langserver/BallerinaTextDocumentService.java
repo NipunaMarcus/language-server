@@ -23,10 +23,14 @@ import org.ballerinalang.langserver.completions.TreeVisitor;
 import org.ballerinalang.langserver.completions.consts.CompletionItemResolver;
 import org.ballerinalang.langserver.completions.resolvers.TopLevelResolver;
 import org.ballerinalang.langserver.completions.util.TextDocumentServiceUtil;
+import org.ballerinalang.langserver.hover.HoverTreeVisitor;
+import org.ballerinalang.langserver.hover.model.HoverResolvedNode;
+import org.ballerinalang.langserver.hover.util.HoverUtil;
 import org.ballerinalang.langserver.signature.SignatureHelpUtil;
 import org.ballerinalang.langserver.workspace.WorkspaceDocumentManager;
 import org.ballerinalang.langserver.workspace.WorkspaceDocumentManagerImpl;
 import org.ballerinalang.langserver.workspace.repository.WorkspacePackageRepository;
+import org.ballerinalang.model.tree.Node;
 import org.ballerinalang.repository.PackageRepository;
 import org.ballerinalang.util.diagnostic.DiagnosticListener;
 import org.eclipse.lsp4j.CodeActionParams;
@@ -158,7 +162,46 @@ public class BallerinaTextDocumentService implements TextDocumentService {
 
     @Override
     public CompletableFuture<Hover> hover(TextDocumentPositionParams position) {
-        return CompletableFuture.supplyAsync(() -> null);
+        return CompletableFuture.supplyAsync(() -> {
+            SuggestionsFilterDataModel filterDataModel = new SuggestionsFilterDataModel();
+            String uri = position.getTextDocument().getUri();
+            String fileContent = this.documentManager.getFileContent(Paths.get(URI.create(uri)));
+            Path filePath = this.getPath(uri);
+            String[] pathComponents = position.getTextDocument().getUri().split("\\" + File.separator);
+            String fileName = pathComponents[pathComponents.length - 1];
+
+            String pkgName = TextDocumentServiceUtil.getPackageFromContent(fileContent);
+            String sourceRoot = TextDocumentServiceUtil.getSourceRoot(filePath, pkgName);
+
+            PackageRepository packageRepository = new WorkspacePackageRepository(sourceRoot, documentManager);
+            CompilerContext compilerContext = prepareCompilerContext(packageRepository, sourceRoot);
+
+            List<org.ballerinalang.util.diagnostic.Diagnostic> balDiagnostics = new ArrayList<>();
+            CollectDiagnosticListener diagnosticListener = new CollectDiagnosticListener(balDiagnostics);
+            BallerinaCustomErrorStrategy customErrorStrategy = new BallerinaCustomErrorStrategy(compilerContext,
+                    position, filterDataModel);
+            compilerContext.put(DiagnosticListener.class, diagnosticListener);
+            compilerContext.put(DefaultErrorStrategy.class, customErrorStrategy);
+
+            Compiler compiler = Compiler.getInstance(compilerContext);
+            if ("".equals(pkgName)) {
+                compiler.compile(fileName);
+            } else {
+                compiler.compile(pkgName);
+            }
+
+            BLangPackage bLangPackage = (BLangPackage) compiler.getAST();
+            ArrayList<HoverResolvedNode> nodes = new ArrayList<>();
+            HoverTreeVisitor hoverTreeVisitor = new HoverTreeVisitor(compilerContext, fileName, position, nodes);
+            bLangPackage.accept(hoverTreeVisitor);
+            Hover hover = null;
+            if(nodes.get(0).getPackageID().name.getValue().equals("ballerina.builtin")){
+                HoverUtil hoverUtil = new HoverUtil();
+                BLangPackage packages = hoverUtil.getBuiltInPackage(compilerContext, nodes.get(0).getPackageID().name);
+                hover = hoverUtil.resolveBuiltInPackageDoc(packages,nodes.get(0));
+            }
+            return hover;
+        });
     }
 
     @Override
@@ -219,13 +262,13 @@ public class BallerinaTextDocumentService implements TextDocumentService {
     @Override
     public CompletableFuture<List<? extends Command>> codeAction(CodeActionParams params) {
         return CompletableFuture.supplyAsync(() ->
-            params.getContext().getDiagnostics().stream()
-            .map(diagnostic -> {
-                List<Command> res = new ArrayList<>();
-                return res.stream();
-            })
-            .flatMap(it -> it)
-            .collect(Collectors.toList())
+                params.getContext().getDiagnostics().stream()
+                        .map(diagnostic -> {
+                            List<Command> res = new ArrayList<>();
+                            return res.stream();
+                        })
+                        .flatMap(it -> it)
+                        .collect(Collectors.toList())
         );
     }
 

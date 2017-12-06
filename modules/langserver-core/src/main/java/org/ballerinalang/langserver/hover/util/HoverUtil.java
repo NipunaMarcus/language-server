@@ -1,0 +1,110 @@
+/*
+ * Copyright (c) 2017, WSO2 Inc. (http://wso2.com) All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.ballerinalang.langserver.hover.util;
+
+import org.ballerinalang.langserver.hover.model.HoverResolvedNode;
+import org.ballerinalang.model.tree.Node;
+import org.ballerinalang.model.tree.TopLevelNode;
+import org.eclipse.lsp4j.Hover;
+import org.eclipse.lsp4j.MarkedString;
+import org.eclipse.lsp4j.TextDocumentPositionParams;
+import org.eclipse.lsp4j.jsonrpc.messages.Either;
+import org.wso2.ballerinalang.compiler.PackageLoader;
+import org.wso2.ballerinalang.compiler.semantics.analyzer.CodeAnalyzer;
+import org.wso2.ballerinalang.compiler.semantics.analyzer.SemanticAnalyzer;
+import org.wso2.ballerinalang.compiler.semantics.model.SymbolTable;
+import org.wso2.ballerinalang.compiler.tree.BLangAnnotationAttachment;
+import org.wso2.ballerinalang.compiler.tree.BLangCompilationUnit;
+import org.wso2.ballerinalang.compiler.tree.BLangFunction;
+import org.wso2.ballerinalang.compiler.tree.BLangPackage;
+import org.wso2.ballerinalang.compiler.tree.expressions.BLangAnnotAttachmentAttribute;
+import org.wso2.ballerinalang.compiler.tree.expressions.BLangLiteral;
+import org.wso2.ballerinalang.compiler.util.CompilerContext;
+import org.wso2.ballerinalang.compiler.util.Name;
+import org.wso2.ballerinalang.compiler.util.Names;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
+/**
+ * Utility class for Hover functionality of language server
+ */
+public class HoverUtil {
+
+    public BLangPackage loadBuiltInPackage(CompilerContext context) {
+        BLangPackage builtInCorePkg = getBuiltInPackage(context, Names.BUILTIN_CORE_PACKAGE);
+        SymbolTable symbolTable = SymbolTable.getInstance(context);
+        symbolTable.createErrorTypes();
+        symbolTable.loadOperators();
+        // Load built-in packages.
+        BLangPackage builtInPkg = getBuiltInPackage(context, Names.BUILTIN_PACKAGE);
+        builtInCorePkg.getStructs().forEach(s -> {
+            builtInPkg.getStructs().add(s);
+            builtInPkg.topLevelNodes.add(s);
+        });
+        symbolTable.builtInPackageSymbol = builtInPkg.symbol;
+        return builtInPkg;
+    }
+
+    public BLangPackage getBuiltInPackage(CompilerContext context, Name name) {
+        PackageLoader pkgLoader = PackageLoader.getInstance(context);
+        SemanticAnalyzer semAnalyzer = SemanticAnalyzer.getInstance(context);
+        CodeAnalyzer codeAnalyzer = CodeAnalyzer.getInstance(context);
+        return codeAnalyzer.analyze(semAnalyzer.analyze(pkgLoader.loadEntryPackage(name.getValue())));
+    }
+
+    public Hover resolveBuiltInPackageDoc(BLangPackage bLangPackage, HoverResolvedNode hoverResolvedNode) {
+        Hover hover = null;
+        switch (hoverResolvedNode.getKind().name()) {
+            case "FUNCTION":
+                BLangFunction bLangFunction = bLangPackage.functions.stream()
+                        .filter(function -> function.name.getValue().equals(hoverResolvedNode.getName().getValue()))
+                        .findAny().orElse(null);
+                if (bLangFunction != null) {
+                    hover = new Hover();
+                    String content = "";
+                    BLangAnnotationAttachment description = bLangFunction.annAttachments.stream().
+                            filter(annotation->annotation.annotationName.getValue().equals("Description"))
+                            .findAny().orElse(null);
+                    for(BLangAnnotAttachmentAttribute attachment: description.attributes) {
+                        content += ((BLangLiteral) attachment.value.value).value;
+                    }
+
+                    List<BLangAnnotationAttachment> params = bLangFunction.annAttachments.stream()
+                            .filter(annotation->annotation.annotationName.getValue().equals("Param")).collect(Collectors.toList());
+
+                    List<Either<String, MarkedString>> contents = new ArrayList<>();
+                    contents.add(Either.forLeft(content));
+                    hover.setContents(contents);
+                }
+                break;
+            default:
+                break;
+        }
+        return hover;
+    }
+
+    public Node resolveNodeAsToPosition(String fileName,
+                                        BLangPackage bLangPackage, TextDocumentPositionParams positionParams) {
+        BLangCompilationUnit bLangCompilationUnit =
+                bLangPackage.compUnits.stream().filter(unit -> unit.name.equals(fileName)).findAny().orElse(null);
+        TopLevelNode topLevelNode = bLangCompilationUnit.getTopLevelNodes().stream().filter(node ->
+                node.getPosition().getStartLine() <= positionParams.getPosition().getLine()
+                        && node.getPosition().getEndLine() >= positionParams.getPosition().getLine()).findAny().orElse(null);
+        return null;
+    }
+}
