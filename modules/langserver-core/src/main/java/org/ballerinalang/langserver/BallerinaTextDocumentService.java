@@ -22,7 +22,6 @@ import org.ballerinalang.langserver.completions.SuggestionsFilterDataModel;
 import org.ballerinalang.langserver.completions.TreeVisitor;
 import org.ballerinalang.langserver.completions.consts.CompletionItemResolver;
 import org.ballerinalang.langserver.completions.resolvers.TopLevelResolver;
-import org.ballerinalang.langserver.completions.util.TextDocumentServiceUtil;
 import org.ballerinalang.langserver.hover.HoverTreeVisitor;
 import org.ballerinalang.langserver.hover.model.HoverResolvedNode;
 import org.ballerinalang.langserver.hover.util.HoverUtil;
@@ -391,5 +390,14 @@ public class BallerinaTextDocumentService implements TextDocumentService {
         } finally {
             return path;
         }
+    }
+
+    protected CompilerContext prepareCompilerContext(PackageRepository packageRepository, String sourceRoot) {
+        CompilerContext context = new CompilerContext();
+        context.put(PackageRepository.class, packageRepository);
+        CompilerOptions options = CompilerOptions.getInstance(context);
+        options.put(SOURCE_ROOT, sourceRoot);
+        options.put(COMPILER_PHASE, CompilerPhase.CODE_ANALYZE.toString());
+        return context;
     }
 }

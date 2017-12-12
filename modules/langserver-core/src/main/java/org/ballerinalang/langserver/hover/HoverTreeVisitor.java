@@ -18,6 +18,7 @@ package org.ballerinalang.langserver.hover;
 
 import org.ballerinalang.langserver.completions.util.positioning.resolvers.*;
 import org.ballerinalang.langserver.hover.model.HoverResolvedNode;
+import org.ballerinalang.langserver.hover.util.HoverUtil;
 import org.ballerinalang.model.tree.Node;
 import org.ballerinalang.model.tree.TopLevelNode;
 import org.ballerinalang.model.tree.statements.StatementNode;
@@ -106,6 +107,7 @@ public class HoverTreeVisitor extends BLangNodeVisitor {
     private SymbolEnter symbolEnter;
     private Class cursorPositionResolver;
     private Map<Class, CursorPositionResolver> cursorPositionResolvers;
+    private Object previousNode;
 
     public HoverTreeVisitor(CompilerContext context, String fileName, TextDocumentPositionParams position, ArrayList<HoverResolvedNode> nodes) {
         this.position = position.getPosition();
@@ -113,7 +115,7 @@ public class HoverTreeVisitor extends BLangNodeVisitor {
         this.positionFilteredNodes = nodes;
         cursorPositionResolvers = new HashMap<>();
         symbolEnter = SymbolEnter.getInstance(context);
-        this.position.setLine(this.position.getLine()+1);
+        this.position.setLine(this.position.getLine() + 1);
     }
 
     // Visitor methods
@@ -152,6 +154,7 @@ public class HoverTreeVisitor extends BLangNodeVisitor {
             return;
         }
         SymbolEnv funcEnv = SymbolEnv.createFunctionEnv(funcNode, funcSymbol.scope, symbolEnv);
+        previousNode = funcNode;
 
         // Cursor position is calculated against the Block statement scope resolver
         cursorPositionResolver = BlockStatementScopeResolver.class;
@@ -210,7 +213,9 @@ public class HoverTreeVisitor extends BLangNodeVisitor {
 
     @Override
     public void visit(BLangAssignment assignNode) {
-        int b = 0;
+        if(assignNode.expr != null) {
+            this.acceptNode(assignNode.expr,null);
+        }
     }
 
     @Override
@@ -228,65 +233,64 @@ public class HoverTreeVisitor extends BLangNodeVisitor {
 
     public void visit(BLangInvocation invocationExpr) {
         BInvokableSymbol symbol = (BInvokableSymbol) invocationExpr.symbol;
-        if(invocationExpr.getPosition().sLine <= position.getLine()
-                && invocationExpr.getPosition().eLine >= position.getLine()){
-
+        if (HoverUtil.isMatchingPosition(invocationExpr.getPosition(), this.position)) {
             HoverResolvedNode hoverResolvedNode = new HoverResolvedNode();
             hoverResolvedNode.setPackageID(invocationExpr.symbol.pkgID);
             hoverResolvedNode.setKind(invocationExpr.symbol.kind);
             hoverResolvedNode.setName(invocationExpr.name);
+            hoverResolvedNode.setPreviousObject(this.previousNode);
             positionFilteredNodes.add(hoverResolvedNode);
         }
     }
 
 
     public void visit(BLangWhile whileNode) {
-        int b = 0;
+
     }
 
     public void visit(BLangTransformer transformerNode) {
-        int b = 0;
+
     }
 
     public void visit(BLangConnector connectorNode) {
-        int b = 0;
+
     }
 
     public void visit(BLangAction actionNode) {
-        int b = 0;
+
     }
 
     public void visit(BLangService serviceNode) {
-        int b = 0;
+
     }
 
     public void visit(BLangResource resourceNode) {
-        int b = 0;
+
     }
 
     @Override
     public void visit(BLangTryCatchFinally tryCatchFinally) {
-        int b = 0;
+
     }
 
     @Override
     public void visit(BLangCatch bLangCatch) {
-        int b = 0;
+
     }
 
     @Override
     public void visit(BLangTransaction transactionNode) {
-        int b = 0;
+
     }
 
     @Override
     public void visit(BLangAbort abortNode) {
-        int b = 0;
+
     }
 
     @Override
     public void visit(BLangRetry retryNode) {
-        int b = 0;
+
     }
 
     private BLangVariableDef createVarDef(BLangVariable var) {
@@ -306,36 +310,36 @@ public class HoverTreeVisitor extends BLangNodeVisitor {
 
     @Override
     public void visit(BLangForkJoin forkJoin) {
-        int a = 0;
+
     }
 
     @Override
     public void visit(BLangWorker workerNode) {
-        int a = 0;
+
     }
 
     @Override
     public void visit(BLangWorkerSend workerSendNode) {
-        int a = 0;
+
     }
 
     @Override
     public void visit(BLangWorkerReceive workerReceiveNode) {
-        int a = 0;
+
     }
 
     @Override
     public void visit(BLangReturn returnNode) {
-        int a = 0;
+
     }
 
     public void visit(BLangNext nextNode) {
-        int a = 0;
+
     }
 
     @Override
     public void visit(BLangComment comment) {
-        int a = 0;
+
     }
 
     private void acceptNode(BLangNode node, SymbolEnv env) {

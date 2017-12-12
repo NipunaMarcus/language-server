@@ -23,6 +23,7 @@ public class HoverResolvedNode {
     private PackageID packageID;
     private BLangIdentifier name;
     private SymbolKind kind;
+    private Object previousObject;
 
     public PackageID getPackageID() {
         return packageID;
@@ -46,5 +47,13 @@ public class HoverResolvedNode {
 
     public void setKind(SymbolKind kind) {
         this.kind = kind;
+    }
+
+    public Object getPreviousObject() {
+        return previousObject;
+    }
+
+    public void setPreviousObject(Object previousObject) {
+        this.previousObject = previousObject;
     }
 }

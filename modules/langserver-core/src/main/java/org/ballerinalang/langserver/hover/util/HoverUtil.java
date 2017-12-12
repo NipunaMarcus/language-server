@@ -15,11 +15,13 @@
  */
 package org.ballerinalang.langserver.hover.util;
 
+import org.ballerinalang.langserver.hover.constants.HoverConstants;
 import org.ballerinalang.langserver.hover.model.HoverResolvedNode;
 import org.ballerinalang.model.tree.Node;
 import org.ballerinalang.model.tree.TopLevelNode;
 import org.eclipse.lsp4j.Hover;
 import org.eclipse.lsp4j.MarkedString;
+import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.TextDocumentPositionParams;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.wso2.ballerinalang.compiler.PackageLoader;
@@ -35,6 +37,7 @@ import org.wso2.ballerinalang.compiler.tree.expressions.BLangLiteral;
 import org.wso2.ballerinalang.compiler.util.CompilerContext;
 import org.wso2.ballerinalang.compiler.util.Name;
 import org.wso2.ballerinalang.compiler.util.Names;
+import org.wso2.ballerinalang.compiler.util.diagnotic.DiagnosticPos;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -70,27 +73,21 @@ public class HoverUtil {
     public Hover resolveBuiltInPackageDoc(BLangPackage bLangPackage, HoverResolvedNode hoverResolvedNode) {
         Hover hover = null;
         switch (hoverResolvedNode.getKind().name()) {
-            case "FUNCTION":
+            case HoverConstants.FUNCTION:
                 BLangFunction bLangFunction = bLangPackage.functions.stream()
                         .filter(function -> function.name.getValue().equals(hoverResolvedNode.getName().getValue()))
                         .findAny().orElse(null);
                 if (bLangFunction != null) {
                     hover = new Hover();
                     String content = "";
-                    BLangAnnotationAttachment description = bLangFunction.annAttachments.stream().
-                            filter(annotation->annotation.annotationName.getValue().equals("Description"))
-                            .findAny().orElse(null);
-                    for(BLangAnnotAttachmentAttribute attachment: description.attributes) {
-                        content += ((BLangLiteral) attachment.value.value).value;
-                    }
-
-                    List<BLangAnnotationAttachment> params = bLangFunction.annAttachments.stream()
-                            .filter(annotation->annotation.annotationName.getValue().equals("Param")).collect(Collectors.toList());
-
+                    content += getAnnotationValue(HoverConstants.DESCRIPTION, bLangFunction.annAttachments);
+                    content += getAnnotationValue(HoverConstants.PARAM, bLangFunction.annAttachments);
                     List<Either<String, MarkedString>> contents = new ArrayList<>();
                     contents.add(Either.forLeft(content));
                     hover.setContents(contents);
                 }
+                break;
+            case HoverConstants.ACTION:
                 break;
             default:
                 break;
@@ -106,5 +103,35 @@ public class HoverUtil {
                 node.getPosition().getStartLine() <= positionParams.getPosition().getLine()
                         && node.getPosition().getEndLine() >= positionParams.getPosition().getLine()).findAny().orElse(null);
         return null;
+    }
+
+    public static boolean isMatchingPosition(DiagnosticPos nodePosition, Position textPosition) {
+        boolean isCorrectPosition = false;
+        if (nodePosition.sLine <= textPosition.getLine() && nodePosition.eLine >= textPosition.getLine()
+                && nodePosition.sCol <= textPosition.getCharacter() && nodePosition.eCol >= textPosition.getCharacter()) {
+            isCorrectPosition = true;
+        }
+        return isCorrectPosition;
+    }
+
+    private String getAnnotationValue(String annotationName, List<BLangAnnotationAttachment> annotationAttachments) {
+        String value = "";
+        for (BLangAnnotationAttachment annotationAttachment : annotationAttachments) {
+            if (annotationAttachment.annotationName.getValue().equals(annotationName)) {
+                value += getAnnotationAttributes("value", annotationAttachment.attributes)+"\n";
+            }
+        }
+        return value;
+    }
+
+    private String getAnnotationAttributes(String attributeName, List<BLangAnnotAttachmentAttribute> annotAttachmentAttributes) {
+        String value = "";
+        for(BLangAnnotAttachmentAttribute attribute : annotAttachmentAttributes){
+            if(attribute.name.getValue().equals(attributeName)){
+                value = ((BLangLiteral)attribute.value.value).getValue().toString();
+                break;
+            }
+        }
+        return value;
     }
 }
